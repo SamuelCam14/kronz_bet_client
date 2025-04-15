@@ -1,123 +1,123 @@
+// RUTA: client/src/components/GameCard.jsx
 import React from "react";
 import GameDetails from "./GameDetails";
 import { format, parseISO, isToday, isValid } from "date-fns";
 import { getLogoSrc } from "../utils/teamLogos";
 
-// --- Función formatGameTimeOrStatus (sin cambios) ---
+// --- Función formatGameTimeOrStatus (SIN CAMBIOS) ---
 const formatGameTimeOrStatus = (game) => {
-  // ... (código exacto de la función anterior)
+  // ... (Código exacto de la función anterior) ...
   const dateTimeString = game.datetime;
-  let gameDate = null;
-  let parseError = false;
-
+  const status_text = game.status || "";
+  const isFinal =
+    status_text.toLowerCase() === "final" ||
+    status_text.toLowerCase().startsWith("f/");
+  if (isFinal) {
+    return (
+      <span className="font-medium text-sm text-gray-500 dark:text-gray-400">
+        FIN
+      </span>
+    );
+  }
+  if (game.period > 0 && !isFinal) {
+    const liveStatus =
+      status_text &&
+      !status_text.includes(":") &&
+      !status_text.includes("PM") &&
+      !status_text.includes("AM")
+        ? status_text
+        : "LIVE";
+    return (
+      <span className="font-bold text-green-600 dark:text-green-400 animate-pulse text-sm">
+        {liveStatus}
+      </span>
+    );
+  }
   if (dateTimeString) {
     try {
-      gameDate = parseISO(dateTimeString);
-      if (!isValid(gameDate)) {
-        parseError = true;
-        gameDate = null;
+      const gameDate = parseISO(dateTimeString);
+      if (isValid(gameDate)) {
+        const gameIsToday = isToday(gameDate);
+        const localTimeString = format(gameDate, "HH:mm");
+        if (
+          localTimeString === "00:00" &&
+          dateTimeString.endsWith("T00:00:00Z")
+        ) {
+          return (
+            <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">
+              {gameIsToday ? "Hoy" : format(gameDate, "dd/MM/yy")}
+            </span>
+          );
+        }
+        return (
+          <div className="flex flex-col items-center text-center">
+            <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">
+              {gameIsToday ? "Hoy" : format(gameDate, "dd/MM/yy")}
+            </span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {localTimeString}
+            </span>
+          </div>
+        );
+      } else {
+        console.warn(
+          "formatGameTimeOrStatus: Invalid date parsed from",
+          dateTimeString
+        );
       }
-    } catch (error) {
-      parseError = true;
+    } catch (e) {
+      console.error(
+        "Error parsing date in formatGameTimeOrStatus",
+        e,
+        dateTimeString
+      );
     }
-  } else {
-    parseError = true;
   }
-
-  try {
-    if (game.status === "Final" || game.status?.startsWith("F/")) {
-      const localTimeString = gameDate ? format(gameDate, "HH:mm") : "--:--";
-      return (
-        <div className="flex flex-col items-center text-center">
-          {" "}
-          <span className="font-bold text-red-500 dark:text-red-400 text-sm">
-            FIN
-          </span>{" "}
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {localTimeString}
-          </span>{" "}
-        </div>
-      );
-    }
-    if (
-      game.period > 0 &&
-      game.status !== "Scheduled" &&
-      !game.status?.startsWith("F/")
-    ) {
-      const liveStatus =
-        game.status &&
-        game.status !== "Scheduled" &&
-        game.status !== game.time &&
-        game.status !== "Final"
-          ? game.status
-          : "LIVE";
-      return (
-        <div className="flex flex-col items-center text-center">
-          {" "}
-          <span className="font-bold text-green-600 dark:text-green-400 animate-pulse text-sm">
-            {liveStatus}
-          </span>{" "}
-        </div>
-      );
-    }
-    if (gameDate) {
-      const gameIsToday = isToday(gameDate);
-      const localTimeString = format(gameDate, "HH:mm");
-      return (
-        <div className="flex flex-col items-center text-center">
-          {" "}
-          <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">
-            {" "}
-            {gameIsToday ? "Hoy" : format(gameDate, "dd/MM/yy")}{" "}
-          </span>{" "}
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {" "}
-            {localTimeString}{" "}
-          </span>{" "}
-        </div>
-      );
-    }
-    return (
-      <span className="text-xs text-yellow-600">{game.status || "N/A"}</span>
-    );
-  } catch (error) {
-    console.error("Error during formatting logic:", error, game);
-    return <span className="text-xs text-red-500">Error</span>;
-  }
+  return (
+    <span className="text-xs text-yellow-600">{status_text || "N/A"}</span>
+  );
 };
 
-// --- Componente GameCard con Lógica Condicional de Tamaño y Renderizado ---
-function GameCard({ game, isExpanded, onCardClick }) {
-  // Condición para mostrar scores (más estricta: solo si hay periodo > 0 o es final)
-  // Opcionalmente, podrías incluir `|| game.home_team_score > 0 || game.visitor_team_score > 0` si quieres mostrar score 0-0 en Q1.
-  // Por ahora, la dejaremos así para que solo aparezca cuando realmente haya actividad o haya terminado.
-  const showScores =
-    game.period > 0 || game.status === "Final" || game.status?.startsWith("F/");
-  const isFinal = game.status === "Final" || game.status?.startsWith("F/");
+// --- Indicador de Ganador (SIN CAMBIOS EN SVG) ---
+const WinnerIndicator = ({ className = "" }) => (
+  <svg
+    className={`inline-block h-3 w-3 fill-current ${className}`}
+    viewBox="0 0 20 20"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <polygon points="0,0 20,10 0,20" />{" "}
+    {/* Triángulo apunta a la derecha por defecto */}
+  </svg>
+);
 
+function GameCard({ game, isExpanded, onCardClick }) {
+  const isFinal =
+    game.status?.toLowerCase() === "final" ||
+    game.status?.toLowerCase().startsWith("f/");
+  const showScores = isFinal || game.period > 0;
   let homeWins = false;
   let visitorWins = false;
-  if (isFinal) {
+  if (
+    isFinal &&
+    typeof game.home_team_score === "number" &&
+    typeof game.visitor_team_score === "number"
+  ) {
     homeWins = game.home_team_score > game.visitor_team_score;
     visitorWins = game.visitor_team_score > game.home_team_score;
   }
-
   const homeLogoSrc = getLogoSrc(game.home_team?.abbreviation);
   const visitorLogoSrc = getLogoSrc(game.visitor_team?.abbreviation);
   const getTeamDisplayName = (team) =>
-    team?.abbreviation || team?.name?.substring(0, 3).toUpperCase() || "TEAM";
-
+    team?.abbreviation || team?.name || "TEAM";
   const homeTeamTextClass =
     isFinal && visitorWins ? "opacity-60" : "opacity-100";
   const visitorTeamTextClass =
     isFinal && homeWins ? "opacity-60" : "opacity-100";
-
   const logoSizeClass = "h-12 w-12 sm:h-14 sm:w-14";
-
-  // Clases condicionales para el tamaño del nombre del equipo
-  const teamNameSizeClass = showScores
-    ? "text-sm sm:text-base"
-    : "text-base sm:text-lg"; // Más grande si no hay score
+  const scoreSizeClass = "text-2xl sm:text-3xl";
+  const scoreWeightClass = "font-bold";
+  const teamNameSizeClass = "text-xs sm:text-sm";
+  const teamNameWeightClass = "font-normal";
 
   return (
     <div
@@ -132,63 +132,75 @@ function GameCard({ game, isExpanded, onCardClick }) {
         <div className="flex justify-between items-center">
           {/* --- Equipo Home (Izquierda) --- */}
           <div className="flex-1 flex items-center space-x-3 sm:space-x-4">
-            {/* Logo Home */}
             {homeLogoSrc && (
               <img
                 src={homeLogoSrc}
-                alt={`${game.home_team?.full_name || "Home"} logo`}
+                alt={`${getTeamDisplayName(game.home_team)} logo`}
                 className={`${logoSizeClass} object-contain flex-shrink-0`}
               />
             )}
-            {/* Contenedor Texto Home */}
-            {/* Aplicamos la opacidad condicional y aseguramos centrado vertical si solo hay nombre */}
             <div
-              className={`flex flex-col items-start justify-center ${homeTeamTextClass} transition-opacity duration-300`}
+              className={`flex flex-col items-start justify-center ${homeTeamTextClass} transition-opacity duration-300 min-w-0`}
             >
-              {/* Nombre Home con tamaño condicional */}
+              {/* Score Home */}
+              {showScores && (
+                <div className="flex items-center">
+                  <span
+                    className={`${scoreSizeClass} ${scoreWeightClass} text-gray-800 dark:text-gray-100`}
+                  >
+                    {game.home_team_score ?? "-"}
+                  </span>
+                  {/* *** CAMBIO: Indicador a la DERECHA del score Home, SIN rotar (apunta ->) *** */}
+                  {homeWins && (
+                    <WinnerIndicator className="ml-1.5 sm:ml-2 text-gray-500 dark:text-gray-100 rotate-180" />
+                  )}
+                </div>
+              )}
+              {/* Nombre Home */}
               <span
-                className={`font-bold text-gray-900 dark:text-white truncate ${teamNameSizeClass}`}
+                className={`${teamNameSizeClass} ${teamNameWeightClass} text-gray-600 dark:text-gray-400 truncate block w-full`}
               >
                 {getTeamDisplayName(game.home_team)}
               </span>
-              {/* === RENDERIZADO CONDICIONAL DEL SPAN DE SCORE === */}
-              {showScores && (
-                <span className="text-xl sm:text-2xl font-light text-gray-700 dark:text-gray-300">
-                  {game.home_team_score ?? "-"}
-                </span>
-              )}
             </div>
           </div>
 
           {/* --- Centro: Hora/Estado --- */}
-          <div className="flex-shrink-0 mx-1 sm:mx-2 min-w-[60px] text-center">
-            {formatGameTimeOrStatus(game)}
+          <div className="flex-shrink-0 mx-1 sm:mx-2 min-w-[50px] text-center">
+            {" "}
+            {formatGameTimeOrStatus(game)}{" "}
           </div>
 
           {/* --- Equipo Visitante (Derecha) --- */}
           <div className="flex-1 flex items-center justify-end space-x-3 sm:space-x-4">
-            {/* Contenedor Texto Visitante */}
             <div
-              className={`flex flex-col items-end justify-center ${visitorTeamTextClass} transition-opacity duration-300`}
+              className={`flex flex-col items-end justify-center ${visitorTeamTextClass} transition-opacity duration-300 min-w-0`}
             >
-              {/* Nombre Visitante con tamaño condicional */}
+              {/* Score Visitante */}
+              {showScores && (
+                <div className="flex items-center">
+                  {/* *** CAMBIO: Indicador a la IZQUIERDA del score Visitante, ROTADO (apunta <-) *** */}
+                  {visitorWins && (
+                    <WinnerIndicator className="mr-1.5 sm:mr-2 text-gray-500 dark:text-gray-100 transform" />
+                  )}
+                  <span
+                    className={`${scoreSizeClass} ${scoreWeightClass} text-gray-800 dark:text-gray-100`}
+                  >
+                    {game.visitor_team_score ?? "-"}
+                  </span>
+                </div>
+              )}
+              {/* Nombre Visitante */}
               <span
-                className={`font-bold text-gray-900 dark:text-white truncate ${teamNameSizeClass}`}
+                className={`${teamNameSizeClass} ${teamNameWeightClass} text-gray-600 dark:text-gray-400 truncate block w-full text-right`}
               >
                 {getTeamDisplayName(game.visitor_team)}
               </span>
-              {/* === RENDERIZADO CONDICIONAL DEL SPAN DE SCORE === */}
-              {showScores && (
-                <span className="text-xl sm:text-2xl font-light text-gray-700 dark:text-gray-300">
-                  {game.visitor_team_score ?? "-"}
-                </span>
-              )}
             </div>
-            {/* Logo Visitante */}
             {visitorLogoSrc && (
               <img
                 src={visitorLogoSrc}
-                alt={`${game.visitor_team?.full_name || "Visitor"} logo`}
+                alt={`${getTeamDisplayName(game.visitor_team)} logo`}
                 className={`${logoSizeClass} object-contain flex-shrink-0`}
               />
             )}
@@ -196,10 +208,11 @@ function GameCard({ game, isExpanded, onCardClick }) {
         </div>
       </div>
 
-      {/* Sección Expandible (sin cambios) */}
+      {/* Sección Expandible */}
       {isExpanded && (
-        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750">
-          <GameDetails gameId={game.id} />
+        <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-750 dark:bg-gray-750">
+          {" "}
+          <GameDetails game={game} />{" "}
         </div>
       )}
     </div>

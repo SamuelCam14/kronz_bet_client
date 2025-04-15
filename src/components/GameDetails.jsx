@@ -1,91 +1,243 @@
-// src/components/GameDetails.jsx
+// RUTA: client/src/components/GameDetails.jsx
 import React, { useState, useEffect } from "react";
-import { getGameStats } from "../services/api";
+import { getBoxScoreByGameId } from "../services/api";
 import { LoadingSpinner } from "./LoadingSpinner";
+import QuarterScoresTable from "./QuarterScoresTable";
+// *** CAMBIO: Importa PlayerStatsRow ***
+import PlayerStatsRow from "./PlayerStatsRow";
 
-function GameDetails({ gameId }) {
-  const [stats, setStats] = useState([]);
+function GameDetails({ game }) {
+  const [playerStats, setPlayerStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const gameId = game?.id;
+  const homeTeamAbbr = game?.home_team?.abbreviation;
+  const visitorTeamAbbr = game?.visitor_team?.abbreviation;
+  const periodScores = game?.period_scores;
+  const isFinal =
+    game.status?.toLowerCase() === "final" ||
+    game.status?.toLowerCase().startsWith("f/");
+
   useEffect(() => {
-    const fetchStats = async () => {
+    if (!gameId) {
+      setError("Missing Game ID.");
+      setLoading(false);
+      setPlayerStats([]);
+      return;
+    }
+    const fetchBoxScoreData = async () => {
+      setLoading(true);
+      setError(null);
+      setPlayerStats([]);
       try {
-        setLoading(true);
-        const data = await getGameStats(gameId);
-        // Podrías necesitar procesar/agrupar 'data' aquí si la API devuelve una lista plana
-        setStats(data);
-        setError(null);
+        const transformedData = await getBoxScoreByGameId(gameId);
+        // *** Ordenar por PTS descendente aquí ***
+        const sortedData = [...transformedData].sort(
+          (a, b) => (b.pts ?? -1) - (a.pts ?? -1)
+        );
+        setPlayerStats(sortedData);
       } catch (err) {
-        setError("Failed to load game stats.");
-        console.error(err);
+        setError(err.message || "Failed to load box score.");
+        setPlayerStats([]);
       } finally {
         setLoading(false);
       }
     };
+    fetchBoxScoreData();
+  }, [gameId]);
 
-    if (gameId) {
-      fetchStats();
-    }
-  }, [gameId]); // Se ejecuta cada vez que gameId cambia
-
-  if (loading)
-    return (
-      <div className="p-4 text-center">
-        <LoadingSpinner />
-      </div>
-    );
-  if (error) return <p className="p-4 text-red-500 text-center">{error}</p>;
-  if (!stats || stats.length === 0)
-    return (
-      <p className="p-4 text-center text-gray-500">
-        No stats available for this game yet.
-      </p>
-    );
-
-  // Agrupa stats por equipo y luego renderiza (esto es un ejemplo, ajusta según la API)
-  const homeStats = stats.filter(
-    (s) => s.team.id === stats[0]?.game.home_team_id
-  ); // Asume que puedes obtener el team_id
-  const visitorStats = stats.filter(
-    (s) => s.team.id === stats[0]?.game.visitor_team_id
+  // Filtra por equipo (la ordenación por puntos se mantiene)
+  const homePlayerStats = playerStats.filter(
+    (s) => s.team?.abbreviation === homeTeamAbbr
   );
-
-  const renderPlayerStats = (playerStats) => (
-    <div
-      key={playerStats.player.id}
-      className="flex justify-between py-1 text-sm"
-    >
-      <span>
-        {playerStats.player.first_name} {playerStats.player.last_name}
-      </span>
-      <span className="font-mono">
-        {String(playerStats.pts ?? "-").padStart(2)} PTS /{" "}
-        {String(playerStats.reb ?? "-").padStart(2)} REB /{" "}
-        {String(playerStats.ast ?? "-").padStart(2)} AST
-      </span>
-    </div>
+  const visitorPlayerStats = playerStats.filter(
+    (s) => s.team?.abbreviation === visitorTeamAbbr
   );
 
   return (
-    <div className="p-4 bg-gray-50 dark:bg-gray-700">
-      <h4 className="font-semibold mb-2 text-center">Game Stats</h4>
-      {/* Aquí renderizarías las stats, quizá en dos columnas o tabs para equipos */}
-      {/* Ejemplo simple: */}
-      <div className="mb-4">
-        <h5 className="font-medium mb-1">
-          {stats[0]?.team.full_name || "Home Team"}
-        </h5>
-        {homeStats.map(renderPlayerStats)}
-      </div>
-      <div>
-        <h5 className="font-medium mb-1">
-          {stats.find((s) => s.team.id !== stats[0]?.game.home_team_id)?.team
-            .full_name || "Visitor Team"}
-        </h5>
-        {visitorStats.map(renderPlayerStats)}
-      </div>
-      {/* Idealmente usar una tabla para mejor alineación */}
+    <div className="p-3 sm:p-4">
+      {/* Tabla de Scores por Periodo (si aplica) */}
+      {isFinal && periodScores && periodScores.length > 0 && (
+        <QuarterScoresTable
+          periodScores={periodScores}
+          homeTeamAbbr={homeTeamAbbr}
+          visitorTeamAbbr={visitorTeamAbbr}
+        />
+      )}
+
+      <h4 className="text-lg font-semibold mt-4 mb-3 text-center text-gray-900 dark:text-white">
+        Player Stats
+      </h4>
+
+      {loading && (
+        <div className="p-4 text-center">
+          <LoadingSpinner />
+          <p>Loading Player Stats...</p>
+        </div>
+      )}
+      {!loading && error && (
+        <p className="p-4 text-red-500 dark:text-red-400 text-center">
+          {error}
+        </p>
+      )}
+
+      {!loading && !error && (
+        <>
+          {/* Tabla Visitante (Player Stats) */}
+          <div className="mb-6">
+            <h5 className="font-medium mb-2 text-gray-800 dark:text-gray-200">
+              {game.visitor_team?.full_name || visitorTeamAbbr || "Visitor"}
+            </h5>
+            <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="py-2 px-2 sm:px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      Player
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      MIN
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      PTS
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      REB
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      AST
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      FG
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      FG%
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {/* *** CAMBIO: Usa el componente PlayerStatsRow *** */}
+                  {visitorPlayerStats.length > 0 ? (
+                    visitorPlayerStats.map((ps) => (
+                      <PlayerStatsRow
+                        key={ps.player?.id || Math.random()}
+                        playerStat={ps}
+                      />
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="7"
+                        className="text-center py-4 text-gray-500 dark:text-gray-400"
+                      >
+                        No player stats available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          {/* Tabla Local (Player Stats) */}
+          <div>
+            <h5 className="font-medium mb-2 text-gray-800 dark:text-gray-200">
+              {game.home_team?.full_name || homeTeamAbbr || "Home"}
+            </h5>
+            <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="py-2 px-2 sm:px-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      Player
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      MIN
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      PTS
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      REB
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      AST
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      FG
+                    </th>
+                    <th
+                      scope="col"
+                      className="py-2 px-1 sm:px-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      FG%
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {/* *** CAMBIO: Usa el componente PlayerStatsRow *** */}
+                  {homePlayerStats.length > 0 ? (
+                    homePlayerStats.map((ps) => (
+                      <PlayerStatsRow
+                        key={ps.player?.id || Math.random()}
+                        playerStat={ps}
+                      />
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="7"
+                        className="text-center py-4 text-gray-500 dark:text-gray-400"
+                      >
+                        No player stats available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

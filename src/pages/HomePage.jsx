@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+// RUTA: client/src/pages/HomePage.jsx
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { getGamesByDate } from "../services/api";
 import GameCard from "../components/GameCard";
+// *** Import nombrado ***
 import { LoadingSpinner } from "../components/LoadingSpinner";
 
 const getTodaysDateString = () => {
@@ -16,88 +18,145 @@ function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedGameId, setExpandedGameId] = useState(null);
+  // Inicialización del estado para la fecha
   const [selectedDate, setSelectedDate] = useState(getTodaysDateString());
 
+  // Efecto principal para carga
   useEffect(() => {
-    const fetchGames = async () => {
+    console.log(
+      `[HomePage Effect] Running. Current selectedDate state: ${selectedDate}`
+    );
+    setLoading(true);
+    setError(null);
+
+    let isMounted = true;
+
+    const fetchInitialGames = async () => {
+      // --- *** GUARDIA IMPORTANTE *** ---
+      // Verifica que selectedDate sea válido ANTES de hacer la llamada API
+      // Usa el valor MÁS RECIENTE del estado en el momento de la ejecución.
+      if (!selectedDate || !/\d{4}-\d{2}-\d{2}/.test(selectedDate)) {
+        console.error(
+          "[HomePage Effect] Invalid or missing selectedDate BEFORE API call:",
+          selectedDate
+        );
+        if (isMounted) {
+          // Establece un error claro y detiene la carga
+          setError("Invalid date state detected on load.");
+          setLoading(false);
+          setGames([]); // Asegura que no haya juegos mostrándose
+        }
+        return; // Detiene la ejecución de esta función
+      }
+      // --- *** FIN DE LA GUARDIA *** ---
+
+      console.log(
+        `[HomePage Effect] Proceeding to fetch games for valid date: ${selectedDate}`
+      );
       try {
-        setLoading(true);
-        setError(null);
-        console.log(`Fetching games for selected date: ${selectedDate}`);
-        const data = await getGamesByDate(selectedDate);
+        const initialData = await getGamesByDate(selectedDate); // Ahora selectedDate debería ser válido
+        console.log(
+          "[HomePage Effect] Raw data received from API Service:",
+          initialData
+        );
 
-        // --- PASO DE ORDENAMIENTO ---
-        if (Array.isArray(data)) {
-          // Ordena los juegos usando la propiedad 'datetime'
-          // Usamos Date.parse() que convierte el string ISO a un timestamp numérico
-          // o puedes usar new Date().getTime()
-          const sortedData = [...data].sort((gameA, gameB) => {
-            const timeA = gameA.datetime ? Date.parse(gameA.datetime) : 0; // Usa 0 o Infinity para manejar nulos/inválidos
-            const timeB = gameB.datetime ? Date.parse(gameB.datetime) : 0;
-
-            // Manejo básico de errores de parseo (NaN) o fechas faltantes
-            if (isNaN(timeA) && isNaN(timeB)) return 0; // Ambos inválidos, no cambian orden relativo
-            if (isNaN(timeA)) return 1; // Inválido A va después de válido B
-            if (isNaN(timeB)) return -1; // Inválido B va antes de válido A
-
-            return timeA - timeB; // Orden ascendente (más temprano primero)
+        let processedGames = [];
+        if (Array.isArray(initialData)) {
+          processedGames = [...initialData].sort((a, b) => {
+            const timeA = a?.datetime ? Date.parse(a.datetime) : 0;
+            const timeB = b?.datetime ? Date.parse(b.datetime) : 0;
+            if (isNaN(timeA) && isNaN(timeB)) return 0;
+            if (isNaN(timeA) || !a?.datetime) return 1;
+            if (isNaN(timeB) || !b?.datetime) return -1;
+            return timeA - timeB;
           });
           console.log(
-            "Sorted Games:",
-            sortedData.map((g) => ({ id: g.id, datetime: g.datetime }))
-          ); // Log para verificar orden
-          setGames(sortedData); // Guarda los datos ORDENADOS en el estado
+            `[HomePage Effect] Initial data sorted. Processed ${processedGames.length} games.`
+          );
         } else {
-          console.warn("API did not return an array, cannot sort:", data);
-          setGames(data || []); // Si no es array, lo guarda tal cual (o vacío)
+          console.warn("[HomePage Effect] API did not return an array.");
         }
-        // --- FIN PASO DE ORDENAMIENTO ---
+
+        console.log(
+          "[HomePage Effect] Attempting to set games state with:",
+          processedGames
+        );
+        if (isMounted) {
+          setGames(processedGames);
+          setError(null); // Limpia error si la llamada fue exitosa (incluso si devuelve [])
+        }
       } catch (err) {
-        setError(`Failed to load games for ${selectedDate}. Please try again.`);
-        console.error(err);
-        setGames([]);
+        console.error(
+          "[HomePage Effect] Error during getGamesByDate call:",
+          err
+        );
+        if (isMounted) {
+          setError(
+            `Failed to load games. ${err.message || "Check API connection."}`
+          );
+          setGames([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          console.log("[HomePage Effect] Loading finished.");
+        }
       }
     };
 
-    fetchGames();
+    fetchInitialGames();
+
+    return () => {
+      isMounted = false;
+    };
+    // El efecto depende solo de selectedDate. Si cambia, se ejecuta de nuevo.
   }, [selectedDate]);
 
   const handleCardClick = (gameId) => {
     setExpandedGameId((prevId) => (prevId === gameId ? null : gameId));
   };
 
+  // Actualiza el estado cuando el input de fecha cambia
   const handleDateChange = (event) => {
+    console.log("[HomePage] Date input changed to:", event.target.value);
     setSelectedDate(event.target.value);
   };
 
+  // --- Renderizado ---
   return (
-    // --- El JSX del return no necesita cambios ---
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6 px-2">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
           NBA Games
         </h1>
+        {/* *** ARREGLO INPUT: value={selectedDate || ''} *** */}
         <input
           type="date"
-          value={selectedDate}
+          value={selectedDate || ""} // Asegura que siempre sea un string controlado
           onChange={handleDateChange}
           className="p-2 border rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:focus:ring-teal-400"
+          aria-label="Select game date"
         />
       </div>
 
+      {/* Lógica de renderizado condicional (sin cambios) */}
       {loading && (
-        <div className="text-center mt-10">
+        <div className="text-center mt-10 flex flex-col items-center text-gray-500 dark:text-gray-400">
           <LoadingSpinner />
+          <p className="mt-2">Loading games for {selectedDate}...</p>
         </div>
       )}
       {!loading && error && (
-        <p className="text-red-500 text-center mt-10">{error}</p>
+        <div className="text-center mt-10 p-4 bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 rounded">
+          <p>
+            <strong>Error:</strong> {error}
+          </p>
+          <p className="mt-1 text-sm">
+            Please try selecting another date or refreshing.
+          </p>
+        </div>
       )}
-
       {!loading && !error && (
-        // El grid ahora renderizará las tarjetas en el orden establecido por setGames(sortedData)
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {games.length > 0 ? (
             games.map((game) => (
@@ -109,9 +168,14 @@ function HomePage() {
               />
             ))
           ) : (
-            <p className="text-center col-span-full text-gray-500 dark:text-gray-400 mt-10">
-              No games found for {selectedDate}.
-            </p>
+            // Muestra este mensaje si games está vacío DESPUÉS de cargar y SIN error
+            <div className="col-span-full text-center mt-10 p-4 bg-gray-100 dark:bg-gray-800 rounded">
+              <p className="text-gray-600 dark:text-gray-400">
+                {" "}
+                No games found scheduled for{" "}
+                {selectedDate || "the selected date"}.{" "}
+              </p>
+            </div>
           )}
         </div>
       )}
