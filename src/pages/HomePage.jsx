@@ -1,29 +1,19 @@
 // RUTA: client/src/pages/HomePage.jsx
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getGamesByDate, getLiveScores } from "../services/api"; // Importa getLiveScores
+import { getGamesByDate } from "../services/api";
 import GameCard from "../components/GameCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 
 const getTodaysDateString = () => {
-  const today = new Date();
+  /* ... */ const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, "0");
   const day = String(today.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-const SESSION_STORAGE_KEY = "kronzSelectedDate";
-
-// Helper para saber si hacer polling
-const shouldPoll = (selectedDate, gamesList) => {
-  if (selectedDate !== getTodaysDateString()) return false;
-  // Hacer polling si hay algún juego que no sea estrictamente "Final" o "F/"
-  return gamesList.some(
-    (game) =>
-      !game.status?.toLowerCase().startsWith("final") &&
-      !game.status?.toLowerCase().startsWith("f/")
-  );
-};
+const SESSION_STORAGE_KEY = "kronzSelectedDate"; // Para la fecha del calendario
+const SESSION_GAME_DATE_PREFIX = "kronzGameDate_"; // Prefijo para fecha de juego específico
 
 function HomePage() {
   const [games, setGames] = useState([]);
@@ -37,68 +27,14 @@ function HomePage() {
     return getTodaysDateString();
   });
   const navigate = useNavigate();
-  const intervalRef = useRef(null); // Ref para el intervalo de polling
 
-  // --- Función para buscar y aplicar updates en vivo ---
-  const fetchLiveUpdates = useCallback(async () => {
-    console.log("[Polling] Fetching live score updates...");
-    try {
-      const liveUpdateData = await getLiveScores();
-      if (liveUpdateData && liveUpdateData.length > 0) {
-        setGames((prevGames) => {
-          const updatesMap = new Map(liveUpdateData.map((g) => [g.id, g]));
-          let stateChanged = false;
-          const updatedGames = prevGames.map((prevGame) => {
-            const update = updatesMap.get(prevGame.id);
-            if (update) {
-              if (
-                prevGame.home_team_score !== update.home_team_score ||
-                prevGame.visitor_team_score !== update.visitor_team_score ||
-                prevGame.status !== update.status ||
-                prevGame.period !== update.period
-              ) {
-                console.log(
-                  `[Polling] Updating game ${prevGame.id}: Score ${update.visitor_team_score}-${update.home_team_score}, Status: ${update.status}`
-                );
-                stateChanged = true;
-                return {
-                  ...prevGame,
-                  home_team_score: update.home_team_score,
-                  visitor_team_score: update.visitor_team_score,
-                  status: update.status,
-                  period: update.period,
-                };
-              }
-            }
-            return prevGame;
-          });
-          if (stateChanged)
-            console.log("[Polling] Game state updated with live data.");
-          return stateChanged ? updatedGames : prevGames; // Actualiza solo si hubo cambios
-        });
-      } else {
-        console.log("[Polling] No live updates received.");
-      }
-    } catch (err) {
-      console.error("[Polling] Error during live update fetch process:", err);
-    }
-  }, []); // Sin dependencias
-
-  // --- Efecto para carga inicial Y control de polling ---
+  // Efecto para CARGAR juegos
   useEffect(() => {
-    console.log(`[HomePage Effect] Running for date: ${selectedDate}`);
+    console.log(`[HomePage Effect - Fetch] Running for date: ${selectedDate}`);
     setLoading(true);
     setError(null);
-
-    // Limpiar intervalo anterior SIEMPRE al iniciar
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-      console.log("[HomePage Effect] Cleared previous interval.");
-    }
     let isMounted = true;
-
-    const fetchInitialGamesAndSetupPolling = async () => {
+    const fetchInitialGames = async () => {
       if (!selectedDate || !/\d{4}-\d{2}-\d{2}/.test(selectedDate)) {
         if (isMounted) {
           setError("Invalid date selected.");
@@ -108,10 +44,10 @@ function HomePage() {
         return;
       }
       try {
-        const initialData = await getGamesByDate(selectedDate);
-        let processedGames = [];
-        if (Array.isArray(initialData)) {
-          processedGames = [...initialData].sort((a, b) => {
+        const d = await getGamesByDate(selectedDate);
+        let p = [];
+        if (Array.isArray(d)) {
+          p = [...d].sort((a, b) => {
             const tA = a?.datetime ? Date.parse(a.datetime) : 0;
             const tB = b?.datetime ? Date.parse(b.datetime) : 0;
             if (isNaN(tA) && isNaN(tB)) return 0;
@@ -119,85 +55,81 @@ function HomePage() {
             if (isNaN(tB) || !b?.datetime) return -1;
             return tA - tB;
           });
-        } else {
-          console.warn("[HomePage Effect] API did not return an array.");
         }
-
         if (isMounted) {
-          setGames(processedGames); // Establece juegos iniciales
+          setGames(p);
           setError(null);
-          // Iniciar polling SI aplica (hoy y juegos no finales)
-          if (shouldPoll(selectedDate, processedGames)) {
-            console.log(
-              "[HomePage Effect] Initial load complete. Starting polling (Interval: 30s)."
-            );
-            fetchLiveUpdates(); // Llamada inicial
-            intervalRef.current = setInterval(fetchLiveUpdates, 30000); // Intervalo de 30 segundos
-          } else {
-            console.log(
-              "[HomePage Effect] Initial load complete. Polling not needed."
-            );
-          }
         }
-      } catch (err) {
+      } catch (e) {
         if (isMounted) {
-          setError(`Failed to load games. ${err.message || "Check API."}`);
+          setError(e.message || "Failed");
           setGames([]);
         }
       } finally {
         if (isMounted) {
           setLoading(false);
-          console.log("[HomePage Effect] Loading finished.");
         }
       }
     };
-    fetchInitialGamesAndSetupPolling();
-    // Limpieza del efecto
+    fetchInitialGames();
     return () => {
       isMounted = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-        console.log(
-          "[HomePage Effect] Cleared interval on cleanup/date change."
-        );
-      }
     };
-  }, [selectedDate, fetchLiveUpdates]); // Depende de fecha y función memoizada
+  }, [selectedDate]);
 
-  // Efecto para guardar fecha en sessionStorage
+  // Efecto para GUARDAR fecha seleccionada
   useEffect(() => {
     if (selectedDate && /^\d{4}-\d{2}-\d{2}/.test(selectedDate)) {
       sessionStorage.setItem(SESSION_STORAGE_KEY, selectedDate);
     }
   }, [selectedDate]);
 
-  // Handlers
+  // Handler para navegar Y GUARDAR FECHA DEL JUEGO
   const handleCardClick = (gameId, gameDate) => {
-    if (!gameId || !gameDate) return;
-    navigate(`/game/${gameId}`, { state: { gameDate: gameDate } });
-  };
-  const handleDateChange = (event) => {
-    const newDate = event.target.value;
-    if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-      setSelectedDate(newDate);
+    if (!gameId || !gameDate) {
+      console.error("handleCardClick missing gameId or gameDate");
+      return;
+    }
+    console.log(
+      `[HomePage] Navigating to game details for ID: ${gameId} on Date: ${gameDate}`
+    );
+    try {
+      // *** NUEVO: Guardar la fecha específica de este juego en sessionStorage ***
+      sessionStorage.setItem(`${SESSION_GAME_DATE_PREFIX}${gameId}`, gameDate);
+      console.log(
+        `[HomePage] Saved gameDate ${gameDate} to sessionStorage for key ${SESSION_GAME_DATE_PREFIX}${gameId}`
+      );
+      // Navega pasando la fecha en el state (para carga inicial sin refresh)
+      navigate(`/game/${gameId}`, { state: { gameDate: gameDate } });
+    } catch (e) {
+      console.error("Error saving gameDate to sessionStorage:", e);
+      // Opcional: Navegar igualmente aunque falle el sessionStorage?
+      // navigate(`/game/${gameId}`, { state: { gameDate: gameDate } });
+      setError("Could not prepare navigation. Please try again."); // Muestra un error si falla el guardado
     }
   };
 
-  // Renderizado
+  const handleDateChange = (event) => {
+    const d = event.target.value;
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      setSelectedDate(d);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6 px-2">
+        {" "}
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
           NBA Games
-        </h1>
+        </h1>{" "}
         <input
           type="date"
           value={selectedDate || ""}
           onChange={handleDateChange}
           className="p-2 border rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-teal-500 dark:focus:ring-teal-400"
           aria-label="Select game date"
-        />
+        />{" "}
       </div>
       {loading && (
         <div className="text-center mt-10 flex flex-col items-center text-gray-500 dark:text-gray-400">
@@ -210,13 +142,12 @@ function HomePage() {
           <p>
             <strong>Error:</strong> {error}
           </p>
-          <p className="mt-1 text-sm">
-            Please try selecting another date or refreshing.
-          </p>
+          <p className="mt-1 text-sm">Please try again.</p>
         </div>
       )}
       {!loading && !error && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {" "}
           {games.length > 0 ? (
             games.map((game) => (
               <GameCard
@@ -235,7 +166,7 @@ function HomePage() {
                 {selectedDate || "the selected date"}.{" "}
               </p>
             </div>
-          )}
+          )}{" "}
         </div>
       )}
     </div>

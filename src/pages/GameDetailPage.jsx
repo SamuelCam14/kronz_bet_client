@@ -2,15 +2,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getGameDetailsById } from "../services/api";
-import GameDetails from "../components/GameDetails"; // Contiene Player Stats
+import GameDetails from "../components/GameDetails";
 import QuarterScoresTable from "../components/QuarterScoresTable";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ArrowLeftIcon } from "@heroicons/react/24/solid";
-// Importar utilidades/componentes necesarios del GameCard
-import { getLogoSrc } from "../utils/teamLogos"; // Para los logos
-import { format, parseISO, isToday, isValid } from "date-fns"; // Para formatear datetime
+import { getLogoSrc } from "../utils/teamLogos";
+import { format, parseISO, isToday, isValid } from "date-fns";
 
-// --- Componente interno WinnerIndicator (copiado de GameCard o importado si lo separaste) ---
 const WinnerIndicator = ({ className = "" }) => (
   <svg
     className={`inline-block h-3 w-3 fill-current ${className}`}
@@ -20,74 +18,83 @@ const WinnerIndicator = ({ className = "" }) => (
     <polygon points="0,0 20,10 0,20" />
   </svg>
 );
-// --- Función interna formatStatusOrTime (adaptada de GameCard) ---
 const formatStatusOrTime = (game) => {
-  // Similar a la de GameCard, pero simplificada para el header de detalle
-  const dateTimeString = game.datetime;
-  const status_text = game.status || "";
-  const period = game.period || 0;
-  const isFinal =
-    status_text.toLowerCase() === "final" ||
-    status_text.toLowerCase().startsWith("f/");
-
-  if (isFinal) {
-    return "FINAL";
+  if (!game) return "N/A";
+  const dt = game.datetime;
+  const st = game.status || "";
+  const p = game.period || 0;
+  const isF = st.toLowerCase() === "final" || st.toLowerCase().startsWith("f/");
+  if (isF) return "FINAL";
+  const isL = st.match(/Q[1-4]|OT|Halftime/i);
+  if (p > 0 || isL) {
+    const dS = isL ? st : "LIVE";
+    return dS;
   }
-  const isLiveStatus = status_text.match(/Q[1-4]|OT|Halftime/i);
-  if (period > 0 || isLiveStatus) {
-    return status_text;
-  } // Muestra el status en vivo directamente
-  if (dateTimeString) {
+  if (dt) {
     try {
-      const gameDate = parseISO(dateTimeString);
-      if (isValid(gameDate)) {
-        const localTimeString = format(gameDate, "HH:mm");
-        if (
-          localTimeString === "00:00" &&
-          dateTimeString.endsWith("T00:00:00Z")
-        ) {
-          return format(gameDate, "EEE, MMM d"); // Solo fecha si es fallback
+      const gD = parseISO(dt);
+      if (isValid(gD)) {
+        const lts = format(gD, "HH:mm");
+        if (lts === "00:00" && dt.endsWith("T00:00:00Z")) {
+          return format(gD, "EEE, MMM d");
         }
-        return format(gameDate, "EEE, MMM d - HH:mm"); // Fecha y hora
+        return format(gD, "EEE, MMM d - HH:mm");
       }
-    } catch (e) {
-      /* Ignora */
-    }
+    } catch (e) {}
   }
-  return status_text || "N/A"; // Fallback
+  return st || "N/A";
 };
+const SESSION_GAME_DATE_PREFIX = "kronzGameDate_";
 
 function GameDetailPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const gameDate = location.state?.gameDate;
 
+  const [gameDate, setGameDate] = useState(() => {
+    /* ... lógica sessionStorage ... */ const dS = location.state?.gameDate;
+    if (dS && /^\d{4}-\d{2}-\d{2}$/.test(dS)) return dS;
+    if (gameId) {
+      const dSt = sessionStorage.getItem(
+        `${SESSION_GAME_DATE_PREFIX}${gameId}`
+      );
+      if (dSt && /^\d{4}-\d{2}-\d{2}$/.test(dSt)) return dSt;
+    }
+    return null;
+  });
   const [gameData, setGameData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // *** NUEVO: Estado para la pestaña activa ***
-  const [activeTab, setActiveTab] = useState("details"); // 'details' o 'boxscore'
+  const [activeTab, setActiveTab] = useState("details"); // Default, se ajusta luego
 
   useEffect(() => {
     if (!gameId || !gameDate || !/\d{4}-\d{2}-\d{2}/.test(gameDate)) {
-      setError("Invalid Game ID or Date provided.");
+      setError("Invalid Game ID or Date.");
       setLoading(false);
       return;
     }
     setLoading(true);
     setError(null);
     setGameData(null);
-    setActiveTab("details"); // Resetea tab
     const fetchGameData = async () => {
       try {
         const data = await getGameDetailsById(gameId, gameDate);
         if (data) {
           setGameData(data);
+          const isGameFinal =
+            data.status?.toLowerCase() === "final" ||
+            data.status?.toLowerCase().startsWith("f/");
+          if (
+            !isGameFinal ||
+            !data.period_scores ||
+            data.period_scores.length === 0
+          ) {
+            setActiveTab("boxscore");
+          } else {
+            setActiveTab("details");
+          }
         } else {
-          setError(
-            `Game details not found (ID: ${gameId}, Date: ${gameDate}).`
-          );
+          setError(`Game details not found.`);
         }
       } catch (err) {
         setError(err.message || "Failed.");
@@ -98,7 +105,6 @@ function GameDetailPage() {
     fetchGameData();
   }, [gameId, gameDate]);
 
-  // --- Lógica de renderizado ---
   if (loading) {
     return (
       <div className="text-center mt-20 flex flex-col items-center">
@@ -108,7 +114,7 @@ function GameDetailPage() {
     );
   }
   if (error) {
-    /* ... (Manejo de error con botón atrás) ... */ return (
+    return (
       <div className="container mx-auto p-4 text-center">
         <p className="text-red-500 dark:text-red-400 mb-4">{error}</p>
         <button
@@ -116,25 +122,28 @@ function GameDetailPage() {
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           <ArrowLeftIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />{" "}
-          Back to Games List{" "}
+          Back{" "}
         </button>
       </div>
     );
   }
   if (!gameData) {
-    /* ... (Manejo de no data con botón atrás) ... */ return (
+    return (
       <div className="container mx-auto p-4 text-center">
         <p className="text-gray-500 dark:text-gray-400 mb-4">
           Game details could not be loaded.
         </p>
-        <button onClick={() => navigate("/")} className="...">
-          Back to Games List
+        <button
+          onClick={() => navigate("/")}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          <ArrowLeftIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />{" "}
+          Back{" "}
         </button>
       </div>
     );
   }
 
-  // Variables para el header (similar a GameCard)
   const isFinal =
     gameData.status?.toLowerCase() === "final" ||
     gameData.status?.toLowerCase().startsWith("f/");
@@ -157,43 +166,43 @@ function GameDetailPage() {
     isFinal && visitorWins ? "opacity-60" : "opacity-100";
   const visitorTeamTextClass =
     isFinal && homeWins ? "opacity-60" : "opacity-100";
-  const logoSizeClass = "h-10 w-10 sm:h-12 sm:w-12"; // Ligeramente más pequeño que en card? O igual?
-  const scoreSizeClass = "text-3xl sm:text-4xl"; // Más grande en detalles
+  const logoSizeClass = "h-10 w-10 sm:h-12 sm:w-12";
+  const scoreSizeClass = "text-3xl sm:text-4xl";
   const scoreWeightClass = "font-bold";
-  const teamNameSizeClass = "text-sm sm:text-base"; // Un poco más grande que en card
-  const teamNameWeightClass = "font-medium"; // Peso medio
+  const teamNameSizeClass = "text-sm sm:text-base";
+  const teamNameWeightClass = "font-medium";
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
-      {/* Botón Volver */}
+      {/* --- CAMBIO: Botón Volver AHORA SIEMPRE va a '/' --- */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => navigate("/")} // Siempre vuelve a la lista principal
         className="mb-4 inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
       >
-        {" "}
-        <ArrowLeftIcon
-          className="-ml-1 mr-1.5 h-4 w-4"
-          aria-hidden="true"
-        />{" "}
-        Back{" "}
+        <ArrowLeftIcon className="-ml-1 mr-1.5 h-4 w-4" aria-hidden="true" />
+        Back
       </button>
+      {/* --- FIN CAMBIO --- */}
 
-      {/* === NUEVO GAME HEADER === */}
+      {/* Game Header (Sin cambios) */}
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6 mb-6">
+        {" "}
         <div className="flex justify-between items-center">
-          {/* Equipo Home (Izquierda) */}
+          {" "}
+          {/* Home */}{" "}
           <div className="flex-1 flex items-center space-x-3 sm:space-x-4">
+            {" "}
             {homeLogoSrc && (
               <img
                 src={homeLogoSrc}
                 alt={`${getTeamDisplayName(gameData.home_team)} logo`}
                 className={`${logoSizeClass} object-contain flex-shrink-0`}
               />
-            )}
+            )}{" "}
             <div
               className={`flex flex-col items-start justify-center ${homeTeamTextClass} transition-opacity duration-300 min-w-0`}
             >
-              {/* Score Home */}
+              {" "}
               {showScores && (
                 <div className="flex items-center">
                   <span
@@ -205,23 +214,22 @@ function GameDetailPage() {
                     <WinnerIndicator className="ml-1.5 sm:ml-2 text-gray-500 dark:text-gray-100" />
                   )}
                 </div>
-              )}
-              {/* Nombre Home */}
+              )}{" "}
               <span
                 className={`${teamNameSizeClass} ${teamNameWeightClass} text-gray-600 dark:text-gray-400 truncate block w-full`}
               >
                 {getTeamDisplayName(gameData.home_team)}
-              </span>
-            </div>
-          </div>
-          {/* Centro: NADA (el estado va abajo ahora) */}
-          <div className="flex-shrink-0 mx-2 sm:mx-4"></div>
-          {/* Equipo Visitante (Derecha) */}
+              </span>{" "}
+            </div>{" "}
+          </div>{" "}
+          {/* Center Spacer */}{" "}
+          <div className="flex-shrink-0 mx-2 sm:mx-4"></div> {/* Visitor */}{" "}
           <div className="flex-1 flex items-center justify-end space-x-3 sm:space-x-4">
+            {" "}
             <div
               className={`flex flex-col items-end justify-center ${visitorTeamTextClass} transition-opacity duration-300 min-w-0`}
             >
-              {/* Score Visitante */}
+              {" "}
               {showScores && (
                 <div className="flex items-center">
                   {visitorWins && (
@@ -233,35 +241,32 @@ function GameDetailPage() {
                     {gameData.visitor_team_score ?? "-"}
                   </span>
                 </div>
-              )}
-              {/* Nombre Visitante */}
+              )}{" "}
               <span
                 className={`${teamNameSizeClass} ${teamNameWeightClass} text-gray-600 dark:text-gray-400 truncate block w-full text-right`}
               >
                 {getTeamDisplayName(gameData.visitor_team)}
-              </span>
-            </div>
+              </span>{" "}
+            </div>{" "}
             {visitorLogoSrc && (
               <img
                 src={visitorLogoSrc}
                 alt={`${getTeamDisplayName(gameData.visitor_team)} logo`}
                 className={`${logoSizeClass} object-contain flex-shrink-0`}
               />
-            )}
-          </div>
-        </div>
-        {/* Estado del partido CENTRADO ABAJO */}
+            )}{" "}
+          </div>{" "}
+        </div>{" "}
         <div className="text-center mt-3 text-sm font-medium text-gray-500 dark:text-gray-400">
-          {formatStatusOrTime(gameData)}
-        </div>
+          {" "}
+          {formatStatusOrTime(gameData)}{" "}
+        </div>{" "}
       </div>
-      {/* === FIN NUEVO GAME HEADER === */}
-
-      {/* === TABS / SLIDER HORIZONTAL === */}
+      {/* Tabs (Sin cambios) */}
       <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
+        {" "}
         <nav className="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
-          {/* Botón/Tab "Details" (Scores por periodo) */}
-          {/* Solo se muestra si el juego es final y hay datos */}
+          {" "}
           {isFinal &&
             gameData.period_scores &&
             gameData.period_scores.length > 0 && (
@@ -273,12 +278,10 @@ function GameDetailPage() {
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
                 }`}
               >
-                Details
+                {" "}
+                Details{" "}
               </button>
-            )}
-
-          {/* Botón/Tab "Box Score" (Player Stats) */}
-          {/* Se muestra siempre que el juego haya empezado o terminado */}
+            )}{" "}
           {(gameData.period > 0 || isFinal) && (
             <button
               onClick={() => setActiveTab("boxscore")}
@@ -288,17 +291,15 @@ function GameDetailPage() {
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
               }`}
             >
-              Box Score
+              {" "}
+              Box Score{" "}
             </button>
-          )}
-          {/* Puedes añadir más tabs aquí en el futuro */}
-        </nav>
+          )}{" "}
+        </nav>{" "}
       </div>
-      {/* === FIN TABS === */}
-
-      {/* === CONTENIDO CONDICIONAL BASADO EN TAB ACTIVA === */}
+      {/* Contenido Condicional (Sin cambios) */}
       <div>
-        {/* Mostrar Scores por Periodo si la tab 'details' está activa */}
+        {" "}
         {activeTab === "details" &&
           isFinal &&
           gameData.period_scores &&
@@ -308,23 +309,20 @@ function GameDetailPage() {
               homeTeamAbbr={gameData.home_team?.abbreviation}
               visitorTeamAbbr={gameData.visitor_team?.abbreviation}
             />
-          )}
-
-        {/* Mostrar Player Stats si la tab 'boxscore' está activa */}
-        {activeTab === "boxscore" && (gameData.period > 0 || isFinal) && (
-          <GameDetails
-            gameId={gameData.id}
-            homeTeamAbbr={gameData.home_team?.abbreviation}
-            visitorTeamAbbr={gameData.visitor_team?.abbreviation}
-          />
-        )}
-
-        {/* Mensaje por defecto si ninguna tab está activa o aplica */}
-        {/* (No debería pasar con la lógica actual si hay datos) */}
+          )}{" "}
+        {activeTab === "boxscore" &&
+          (gameData.period > 0 || isFinal) &&
+          gameData.id &&
+          gameData.home_team?.abbreviation &&
+          gameData.visitor_team?.abbreviation && (
+            <GameDetails
+              gameId={gameData.id}
+              homeTeamAbbr={gameData.home_team.abbreviation}
+              visitorTeamAbbr={gameData.visitor_team.abbreviation}
+            />
+          )}{" "}
       </div>
-      {/* === FIN CONTENIDO CONDICIONAL === */}
     </div>
   );
 }
-
 export default GameDetailPage;
