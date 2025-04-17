@@ -132,7 +132,7 @@ function HomePage() {
               "[HomePage Effect] Initial load complete. Starting polling (Interval: 30s)."
             );
             fetchLiveUpdates(); // Llamada inicial
-            intervalRef.current = setInterval(fetchLiveUpdates, 15000); // Intervalo de 15 segundos
+            intervalRef.current = setInterval(fetchLiveUpdates, 30000); // Intervalo de 30 segundos
           } else {
             console.log(
               "[HomePage Effect] Initial load complete. Polling not needed."

@@ -148,7 +148,7 @@ function GameCard({ game, onCardClick }) {
                     {game.home_team_score ?? "-"}
                   </span>
                   {homeWins && (
-                    <WinnerIndicator className="ml-1.5 sm:ml-2 text-gray-500 dark:text-gray-100 rotate-180" />
+                    <WinnerIndicator className="ml-1.5 sm:ml-2 text-gray-500 dark:text-gray-100" />
                   )}
                 </div>
               )}
@@ -172,7 +172,7 @@ function GameCard({ game, onCardClick }) {
               {showScores && (
                 <div className="flex items-center">
                   {visitorWins && (
-                    <WinnerIndicator className="mr-1.5 sm:mr-2 text-gray-500 dark:text-gray-100 transform" />
+                    <WinnerIndicator className="mr-1.5 sm:mr-2 text-gray-500 dark:text-gray-100 transform rotate-180" />
                   )}
                   <span
                     className={`${scoreSizeClass} ${scoreWeightClass} text-gray-800 dark:text-gray-100`}
