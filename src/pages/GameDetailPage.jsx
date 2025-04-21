@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getGameDetailsById } from "../services/api";
-import GameDetails from "../components/GameDetails";
+import GameDetails from "../components/GameDetails"; // Contiene Player Stats
 import QuarterScoresTable from "../components/QuarterScoresTable";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ArrowLeftIcon } from "@heroicons/react/24/solid";
@@ -24,11 +24,18 @@ const formatStatusOrTime = (game) => {
   const st = game.status || "";
   const p = game.period || 0;
   const isF = st.toLowerCase() === "final" || st.toLowerCase().startsWith("f/");
-  if (isF) return "FINAL";
+  if (isF)
+    return (
+      <span className="font-medium text-sm text-g-text-secondary">FINAL</span>
+    );
   const isL = st.match(/Q[1-4]|OT|Halftime/i);
   if (p > 0 || isL) {
     const dS = isL ? st : "LIVE";
-    return dS;
+    return (
+      <span className="font-bold text-green-400 animate-pulse text-sm">
+        {dS}
+      </span>
+    );
   }
   if (dt) {
     try {
@@ -36,13 +43,21 @@ const formatStatusOrTime = (game) => {
       if (isValid(gD)) {
         const lts = format(gD, "HH:mm");
         if (lts === "00:00" && dt.endsWith("T00:00:00Z")) {
-          return format(gD, "EEE, MMM d");
+          return (
+            <span className="text-sm text-g-text-secondary">
+              {format(gD, "EEE, MMM d")}
+            </span>
+          );
         }
-        return format(gD, "EEE, MMM d - HH:mm");
+        return (
+          <span className="text-sm text-g-text-secondary">
+            {format(gD, "EEE, MMM d - HH:mm")}
+          </span>
+        );
       }
     } catch (e) {}
   }
-  return st || "N/A";
+  return <span className="text-xs text-yellow-600">{st || "N/A"}</span>;
 };
 const SESSION_GAME_DATE_PREFIX = "kronzGameDate_";
 
@@ -50,9 +65,8 @@ function GameDetailPage() {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-
   const [gameDate, setGameDate] = useState(() => {
-    /* ... lógica sessionStorage ... */ const dS = location.state?.gameDate;
+    const dS = location.state?.gameDate;
     if (dS && /^\d{4}-\d{2}-\d{2}$/.test(dS)) return dS;
     if (gameId) {
       const dSt = sessionStorage.getItem(
@@ -65,8 +79,7 @@ function GameDetailPage() {
   const [gameData, setGameData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState("details"); // Default, se ajusta luego
-
+  const [activeTab, setActiveTab] = useState("details");
   useEffect(() => {
     if (!gameId || !gameDate || !/\d{4}-\d{2}-\d{2}/.test(gameDate)) {
       setError("Invalid Game ID or Date.");
@@ -81,14 +94,10 @@ function GameDetailPage() {
         const data = await getGameDetailsById(gameId, gameDate);
         if (data) {
           setGameData(data);
-          const isGameFinal =
+          const isGf =
             data.status?.toLowerCase() === "final" ||
             data.status?.toLowerCase().startsWith("f/");
-          if (
-            !isGameFinal ||
-            !data.period_scores ||
-            data.period_scores.length === 0
-          ) {
+          if (!isGf || !data.period_scores || data.period_scores.length === 0) {
             setActiveTab("boxscore");
           } else {
             setActiveTab("details");
@@ -109,17 +118,17 @@ function GameDetailPage() {
     return (
       <div className="text-center mt-20 flex flex-col items-center">
         <LoadingSpinner />
-        <p className="mt-2">Loading Game Details...</p>
+        <p className="mt-2 text-g-text-secondary">Loading Game Details...</p>
       </div>
     );
   }
   if (error) {
     return (
       <div className="container mx-auto p-4 text-center">
-        <p className="text-red-500 dark:text-red-400 mb-4">{error}</p>
+        <p className="text-g-text-error mb-4">{error}</p>
         <button
           onClick={() => navigate("/")}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           <ArrowLeftIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />{" "}
           Back{" "}
@@ -130,12 +139,12 @@ function GameDetailPage() {
   if (!gameData) {
     return (
       <div className="container mx-auto p-4 text-center">
-        <p className="text-gray-500 dark:text-gray-400 mb-4">
+        <p className="text-g-text-secondary mb-4">
           Game details could not be loaded.
         </p>
         <button
           onClick={() => navigate("/")}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
           <ArrowLeftIcon className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />{" "}
           Back{" "}
@@ -174,21 +183,21 @@ function GameDetailPage() {
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
-      {/* --- CAMBIO: Botón Volver AHORA SIEMPRE va a '/' --- */}
+      {/* Botón Volver (estilo dark) */}
       <button
-        onClick={() => navigate("/")} // Siempre vuelve a la lista principal
-        className="mb-4 inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        onClick={() => navigate("/")}
+        className="mb-4 inline-flex items-center px-3 py-1.5 border border-g-dark-border text-sm font-medium rounded-lg text-g-text-primary bg-g-dark-surface hover:bg-g-dark-surface-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-g-text-link focus:ring-offset-g-dark-background"
       >
-        <ArrowLeftIcon className="-ml-1 mr-1.5 h-4 w-4" aria-hidden="true" />
-        Back
-      </button>
-      {/* --- FIN CAMBIO --- */}
-
-      {/* Game Header (Sin cambios) */}
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 sm:p-6 mb-6">
         {" "}
+        <ArrowLeftIcon
+          className="-ml-1 mr-1.5 h-4 w-4"
+          aria-hidden="true"
+        />{" "}
+        Back{" "}
+      </button>
+      {/* Game Header (estilo dark) */}
+      <div className="bg-g-dark-surface shadow rounded-xl p-4 sm:p-6 mb-6">
         <div className="flex justify-between items-center">
-          {" "}
           {/* Home */}{" "}
           <div className="flex-1 flex items-center space-x-3 sm:space-x-4">
             {" "}
@@ -206,24 +215,25 @@ function GameDetailPage() {
               {showScores && (
                 <div className="flex items-center">
                   <span
-                    className={`${scoreSizeClass} ${scoreWeightClass} text-gray-800 dark:text-gray-100`}
+                    className={`${scoreSizeClass} ${scoreWeightClass} text-g-text-primary`}
                   >
                     {gameData.home_team_score ?? "-"}
                   </span>
                   {homeWins && (
-                    <WinnerIndicator className="ml-1.5 sm:ml-2 text-gray-500 dark:text-gray-100" />
+                    <WinnerIndicator className="ml-1.5 sm:ml-2 text-g-text-secondary" />
                   )}
                 </div>
               )}{" "}
               <span
-                className={`${teamNameSizeClass} ${teamNameWeightClass} text-gray-600 dark:text-gray-400 truncate block w-full`}
+                className={`${teamNameSizeClass} ${teamNameWeightClass} text-g-text-secondary truncate block w-full`}
               >
                 {getTeamDisplayName(gameData.home_team)}
               </span>{" "}
             </div>{" "}
-          </div>{" "}
+          </div>
           {/* Center Spacer */}{" "}
-          <div className="flex-shrink-0 mx-2 sm:mx-4"></div> {/* Visitor */}{" "}
+          <div className="flex-shrink-0 mx-2 sm:mx-4"></div>
+          {/* Visitor */}{" "}
           <div className="flex-1 flex items-center justify-end space-x-3 sm:space-x-4">
             {" "}
             <div
@@ -233,17 +243,17 @@ function GameDetailPage() {
               {showScores && (
                 <div className="flex items-center">
                   {visitorWins && (
-                    <WinnerIndicator className="mr-1.5 sm:mr-2 text-gray-500 dark:text-gray-100 transform rotate-180" />
+                    <WinnerIndicator className="mr-1.5 sm:mr-2 text-g-text-secondary transform rotate-180" />
                   )}
                   <span
-                    className={`${scoreSizeClass} ${scoreWeightClass} text-gray-800 dark:text-gray-100`}
+                    className={`${scoreSizeClass} ${scoreWeightClass} text-g-text-primary`}
                   >
                     {gameData.visitor_team_score ?? "-"}
                   </span>
                 </div>
               )}{" "}
               <span
-                className={`${teamNameSizeClass} ${teamNameWeightClass} text-gray-600 dark:text-gray-400 truncate block w-full text-right`}
+                className={`${teamNameSizeClass} ${teamNameWeightClass} text-g-text-secondary truncate block w-full text-right`}
               >
                 {getTeamDisplayName(gameData.visitor_team)}
               </span>{" "}
@@ -255,18 +265,16 @@ function GameDetailPage() {
                 className={`${logoSizeClass} object-contain flex-shrink-0`}
               />
             )}{" "}
-          </div>{" "}
-        </div>{" "}
-        <div className="text-center mt-3 text-sm font-medium text-gray-500 dark:text-gray-400">
+          </div>
+        </div>
+        <div className="text-center mt-3 text-sm font-medium text-g-text-secondary">
           {" "}
           {formatStatusOrTime(gameData)}{" "}
-        </div>{" "}
+        </div>
       </div>
-      {/* Tabs (Sin cambios) */}
-      <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-        {" "}
+      {/* Tabs (estilo dark) */}
+      <div className="mb-6 border-b border-g-dark-border">
         <nav className="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
-          {" "}
           {isFinal &&
             gameData.period_scores &&
             gameData.period_scores.length > 0 && (
@@ -274,32 +282,31 @@ function GameDetailPage() {
                 onClick={() => setActiveTab("details")}
                 className={`whitespace-nowrap py-3 px-1 border-b-2 text-sm font-medium ${
                   activeTab === "details"
-                    ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
-                    : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
+                    ? "border-g-text-link text-g-text-link"
+                    : "border-transparent text-g-text-secondary hover:text-g-text-primary hover:border-g-dark-outline"
                 }`}
               >
                 {" "}
                 Details{" "}
               </button>
-            )}{" "}
+            )}
           {(gameData.period > 0 || isFinal) && (
             <button
               onClick={() => setActiveTab("boxscore")}
               className={`whitespace-nowrap py-3 px-1 border-b-2 text-sm font-medium ${
                 activeTab === "boxscore"
-                  ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-600"
+                  ? "border-g-text-link text-g-text-link"
+                  : "border-transparent text-g-text-secondary hover:text-g-text-primary hover:border-g-dark-outline"
               }`}
             >
               {" "}
               Box Score{" "}
             </button>
-          )}{" "}
-        </nav>{" "}
+          )}
+        </nav>
       </div>
-      {/* Contenido Condicional (Sin cambios) */}
+      {/* Contenido Condicional */}
       <div>
-        {" "}
         {activeTab === "details" &&
           isFinal &&
           gameData.period_scores &&
@@ -309,7 +316,7 @@ function GameDetailPage() {
               homeTeamAbbr={gameData.home_team?.abbreviation}
               visitorTeamAbbr={gameData.visitor_team?.abbreviation}
             />
-          )}{" "}
+          )}
         {activeTab === "boxscore" &&
           (gameData.period > 0 || isFinal) &&
           gameData.id &&
@@ -320,7 +327,7 @@ function GameDetailPage() {
               homeTeamAbbr={gameData.home_team.abbreviation}
               visitorTeamAbbr={gameData.visitor_team.abbreviation}
             />
-          )}{" "}
+          )}
       </div>
     </div>
   );

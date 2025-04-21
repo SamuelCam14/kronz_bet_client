@@ -1,5 +1,68 @@
+/* RUTA: client/src/index.css */
 @import "tailwindcss";
 
+/* Definición del Tema Personalizado (SOLO DARK) */
+@theme {
+    /* Paleta Dark */
+    --color-g-dark-background: #131314;
+    --color-g-dark-surface: #1e1f20;
+    --color-g-dark-surface-hover: #282a2c;
+    --color-g-dark-surface-active: #3c3f43;
+    --color-g-dark-border: #444746;
+    --color-g-dark-outline: #5f6368;
+
+    /* Paleta Texto (Solo colores necesarios para dark) */
+    --color-g-text-primary: #e3e3e3;
+    --color-g-text-secondary: #a1a3a7;
+    --color-g-text-link: #8ab4f8;
+    --color-g-text-link-hover: #aecbfa;
+    --color-g-text-error: #f28b82;
+
+    /* Colores específicos para estados (ej. Live) */
+    --color-g-status-live: theme('colors.green.400');
+    /* Ejemplo */
+    --color-g-status-final: var(--color-g-text-secondary);
+    /* Mismo que secundario */
+    --color-g-status-upcoming: theme('colors.yellow.600');
+    /* Ejemplo */
+
+    /* Iconos secundarios */
+    --icon-color-secondary: var(--color-g-text-secondary);
+}
+
+/* Aplicar colores base DIRECTAMENTE para dark mode */
 body {
-    @apply bg-gray-100 dark:bg-gray-950 text-black dark:text-white;
+    @apply min-h-screen bg-g-dark-background text-g-text-primary;
+    /* Quitamos transition-colors si no hay cambio de tema */
+}
+
+/* Estilos base para encabezados y enlaces en dark mode */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    @apply text-g-text-primary;
+    /* Color primario oscuro */
+}
+
+a {
+    @apply text-g-text-link hover:text-g-text-link-hover;
+}
+
+input::placeholder,
+textarea::placeholder {
+    @apply text-g-text-secondary opacity-70;
+    /* Color secundario oscuro */
+}
+
+/* Estilo base para botones (ejemplo dark) */
+.btn-primary {
+    @apply px-4 py-2 bg-g-text-link text-g-dark-background font-semibold rounded-lg shadow hover:bg-g-text-link-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-g-dark-background;
+}
+
+/* Estilo base para bordes oscuros */
+.bordered-element {
+    @apply border border-g-dark-border;
 }
